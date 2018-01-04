@@ -7,22 +7,25 @@ Calibrator::Calibrator() :
     nh_private_("~"),
     it_(nh_)
 {
-    // Subscrive to input video feed and publish output video feed
     image_sub_ = it_.subscribe("/cv_camera/image_raw", 1, &Calibrator::image_callback, this);
     output_pub_ = it_.advertise("/image_converter/tracked", 1);
 
     nh_private_.param<bool>("show_tracked", show_tracked_, true);
-
     if (show_tracked_)
     {
         cv::namedWindow("tracked");
     }
 
-    // ELP Web Cam
-    //    camMatrix_ = (Mat1d(3, 3) <<  469.462257, 0.000000, 325.442775,
-    //                                 0.000000, 470.773506, 230.956417,
-    //                                 0.000000, 0.000000, 1.000000);
-    //    distCoeffs_ = (Mat1d(1, 5) << -0.390234, 0.136303, -0.002855, 0.002160, 0.000000);
+    // Load intrinsics
+    string intrinsics_path;
+    nh_private_.param<string>("intrinsics_path", intrinsics_path, ros::package::getPath("camera_imu_calibration")+"/param/elp.yaml");
+    FileStorage fs(intrinsics_path, FileStorage::READ);
+    if (!fs.isOpened()) {
+        ROS_FATAL("unable to find camera intrinsics at %s", intrinsics_path.c_str());
+    } else {
+        fs["camMatrix"] >> camMatrix_;
+        fs["distCoeffs"] >> distCoeffs_;
+    }
 
     // Create a bunch of aruco objects
     detectorParams_ = aruco::DetectorParameters::create();

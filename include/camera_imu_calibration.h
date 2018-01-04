@@ -1,6 +1,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/aruco/charuco.hpp>
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <vector>
 #include <iostream>
 #include <sensor_msgs/Image.h>
