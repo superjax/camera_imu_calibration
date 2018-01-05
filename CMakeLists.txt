@@ -34,7 +34,7 @@ add_executable(camera_imu_calibration
   src/camera_imu_calibration.cpp
   include/camera_imu_calibration.h
 )
-target_link_libraries(camera_imu_calibration ${OpenCV_LIBS} ${catkin_LIBRARIES} )
+target_link_libraries(camera_imu_calibration ${OpenCV_LIBS} ${catkin_LIBRARIES} gtsam)
 
 add_executable(create_board
     src/create_board.cpp
