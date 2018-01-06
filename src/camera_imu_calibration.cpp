@@ -35,6 +35,8 @@ Calibrator::Calibrator() :
     // create charuco board object
     charucoboard_ = aruco::CharucoBoard::create(5, 7, 0.0351f, 0.0222f, dictionary_);
     board_ = charucoboard_.staticCast<aruco::Board>();
+
+    initialize_graph();
 }
 
 Calibrator::~Calibrator()
@@ -230,6 +232,11 @@ void Calibrator::initialize_graph()
   fg.add(gt::PriorFactor<gt::Vector3>(V(0), init_vel, init_vel_cov));
   fg.add(gt::PriorFactor<gt::imuBias::ConstantBias>(B(0), init_imu_bias, imu_bias_init_cov));
   fg.add(gt::PriorFactor<gt::Cal3_S2>(K(0), init_K, init_K_cov));
+
+
+  ofstream file;
+  file.open(ros::package::getPath("camera_imu_calibration") + "/saved_graph.gv", ios::out);
+  fg.saveGraph(file, initial);
 }
 
 

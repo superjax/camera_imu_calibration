@@ -1,6 +1,7 @@
 #include <vector>
 #include <deque>
 #include <iostream>
+#include <fstream>
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/aruco/charuco.hpp>
