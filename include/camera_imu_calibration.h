@@ -20,8 +20,10 @@
 #include <gtsam/slam/dataset.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/slam/PriorFactor.h>
+#include <gtsam_unstable/slam/ProjectionFactorPPPC.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/inference/Symbol.h>
 
 using namespace cv;
@@ -34,6 +36,7 @@ using gt::symbol_shorthand::X; // Pose3 (x,y,z,r,p,y)
 using gt::symbol_shorthand::V; // Vel   (xdot,ydot,zdot)
 using gt::symbol_shorthand::B; // Bias  (ax,ay,az,gx,gy,gz)
 using gt::symbol_shorthand::L; // Landmarks (x, y, z)
+using gt::symbol_shorthand::K; // Calibration (fx, fy, s, px, py)
 
 class Calibrator
 {
@@ -65,7 +68,7 @@ private:
 
     void get_corners(const InputArray img, vector<Point2f>& charucoCorners, vector<int>& charucoIds, OutputArray tracked);
     void process_measurement_queues();
-    void initialize_graph(const gt::Pose3 initial_pose);
+    void initialize_graph();
     void add_measurement_to_graph(const Vector3d &dtheta, const Vector3d &dvel, const vector<Point2f> &corners, const vector<int> &ids);
 
     ros::NodeHandle nh_;
@@ -95,4 +98,6 @@ private:
 
     gt::NonlinearFactorGraph graph_;
     gt::PreintegratedCombinedMeasurements *imu_preintegrated_;
+
+    gt::Pose3* camera_transform_;
 };

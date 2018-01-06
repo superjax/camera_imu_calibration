@@ -178,77 +178,58 @@ void Calibrator::process_measurement_queues()
     }
 }
 
-void Calibrator::initialize_graph(const gtsam::Pose3 initial_pose)
+void Calibrator::initialize_graph()
 {
-    gt::Vector3 prior_velocity(0.0, 0.0, 0.0);
-    gt::imuBias::ConstantBias prior_imu_bias; // assume zero
+  // Initialize Camera Transform with best guess
+  camera_transform_ = new gt::Pose3(gt::Rot3::Quaternion(1.0, 0.0, 0.0, 0.0), gt::Point3(0.0, 0.0, 0.0));
 
-    // Add Origin to initial guess
-    initial_values_.insert(X(num_poses_), initial_pose);
-    initial_values_.insert(V(num_poses_), prior_velocity);
-    initial_values_.insert(B(num_poses_), prior_imu_bias);
+  // Initial guess and uncertainty for pose
+  gt::Pose3 init_pose(gt::Rot3::Quaternion(1.0, 0.0, 0.0, 0.0), gt::Point3(0.0, 0.0, 0.0));
+  gt::noiseModel::Diagonal::shared_ptr init_pose_cov = gt::noiseModel::Diagonal::Sigmas((gt::Vector(6) << 5*M_PI/180.0, 5*M_PI/180.0, 5*M_PI/180.0, 20, 20, 0.1).finished());
 
-    // Create noise estimates for initial pose, velocity and bias
-    gt::noiseModel::Diagonal::shared_ptr pose_noise_model = gt::noiseModel::Diagonal::Sigmas((gt::Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad, m, m, m
-    gt::noiseModel::Diagonal::shared_ptr velocity_noise_model = gt::noiseModel::Isotropic::Sigma(3,0.1); // m/s
-    gt::noiseModel::Diagonal::shared_ptr bias_noise_model = gt::noiseModel::Isotropic::Sigma(6,1e-3);
+  // Initial Guess and uncertainty for Camera Intrinsics
+  gt::Cal3_S2 init_K((gt::Vector(5) << 400, 400, 0, 320, 240).finished());
+  gt::noiseModel::Diagonal::shared_ptr init_K_cov = gt::noiseModel::Diagonal::Sigmas((gt::Vector(5) << 20.0, 20.0, 0.001, 20.0, 20.0).finished());
 
-    // Add all prior factors to the graph
-    graph_.add(gt::PriorFactor<gt::Pose3>(X(num_poses_), initial_pose, pose_noise_model));
-    graph_.add(gt::PriorFactor<gt::Vector3>(V(num_poses_), prior_velocity,velocity_noise_model));
-    graph_.add(gt::PriorFactor<gt::imuBias::ConstantBias>(B(num_poses_), prior_imu_bias,bias_noise_model));
-
-    // Add chessboard corner XYZ positions to initial_values and graph
-    gt::noiseModel::Diagonal::shared_ptr corner_noise_model = gt::noiseModel::Isotropic::Sigma(3,1e-4); // m
-    for (int row = 0; row < 5; row++)
-    {
-        for (int col = 0; col < 7; col++)
-        {
-            gt::Point3 marker_point(0.0351f * (row+1), 0.0351f * (col+1), 0.0);
-            int corner_num = row + (5*col);
-            initial_values_.insert(L(corner_num), marker_point);
-            graph_.add(gt::PriorFactor<gt::Point3>(L(corner_num), marker_point ,corner_noise_model));
-        }
-    }
-
-    // We use the sensor specs to build the noise model for the IMU factor.
-    double accel_noise_sigma = 0.0003924;
-    double gyro_noise_sigma = 0.000205689024915;
-    double accel_bias_rw_sigma = 0.004905;
-    double gyro_bias_rw_sigma = 0.000001454441043;
-    gt::Matrix33 measured_acc_cov = gt::Matrix33::Identity(3,3) * pow(accel_noise_sigma,2);
-    gt::Matrix33 measured_omega_cov = gt::Matrix33::Identity(3,3) * pow(gyro_noise_sigma,2);
-    gt::Matrix33 integration_error_cov = gt::Matrix33::Identity(3,3)*1e-8; // error committed in integrating position from velocities
-    gt::Matrix33 bias_acc_cov = gt::Matrix33::Identity(3,3) * pow(accel_bias_rw_sigma,2);
-    gt::Matrix33 bias_omega_cov = gt::Matrix33::Identity(3,3) * pow(gyro_bias_rw_sigma,2);
-    gt::Matrix66 bias_acc_omega_int = gt::Matrix::Identity(6,6)*1e-5; // error in the bias used for preintegration
-
-    // Create a NED preintegration shared parameter
-    boost::shared_ptr<gt::PreintegratedCombinedMeasurements::Params> p = gt::PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0);
-    // PreintegrationBase params:
-    p->accelerometerCovariance = measured_acc_cov; // acc white noise in continuous
-    p->integrationCovariance = integration_error_cov; // integration uncertainty continuous
-    // should be using 2nd order integration
-    // PreintegratedRotation params:
-    p->gyroscopeCovariance = measured_omega_cov; // gyro white noise in continuous
-    // PreintegrationCombinedMeasurements params:
-    p->biasAccCovariance = bias_acc_cov; // acc bias in continuous
-    p->biasOmegaCovariance = bias_omega_cov; // gyro bias in continuous
-    p->biasAccOmegaInt = bias_acc_omega_int;
+  // Initial Guess and uncertainty for initial velocity
+  gt::Vector3 init_vel(0.0, 0.0, 0.0);
+  gt::noiseModel::Diagonal::shared_ptr init_vel_cov = gt::noiseModel::Isotropic::Sigma(3, 0.1);
 
 
-    imu_preintegrated_ = new gt::PreintegratedCombinedMeasurements(p, prior_imu_bias);
+  // Initial Guess and uncertainty for initial IMU bias and the
+  gt::imuBias::ConstantBias init_imu_bias(gt::Vector3::Zero(), gt::Vector3::Zero());
+  gt::noiseModel::Diagonal::shared_ptr imu_bias_init_cov = gt::noiseModel::Diagonal::Sigmas((gt::Vector(6) << 0.1, 0.1, 0.1, 5e-5, 5e-5, 5e-5).finished());
+  gt::noiseModel::Diagonal::shared_ptr imu_bias_prop_cov = gt::noiseModel::Isotropic::Sigma(6, 5e-5);
 
 
-    // Store previous state for the imu integration and the latest predicted outcome.
-    NavState prev_state(prior_pose, prior_velocity);
-    NavState prop_state = prev_state;
-    imuBias::ConstantBias prev_bias = prior_imu_bias;
+  // IMU Parameters
+  boost::shared_ptr<gt::PreintegrationParams> IMU_params = boost::make_shared<gt::PreintegrationParams>(gt::Vector3(0, 0, -9.8));
+  IMU_params->setAccelerometerCovariance(gt::Matrix33::Identity() * pow(1e-2, 2));
+  IMU_params->setGyroscopeCovariance(gt::Matrix33::Identity() * pow(1e-2, 2));
+  IMU_params->setIntegrationCovariance(gt::Matrix33::Identity() * pow(1e-1, 2));
 
+  // Noise Models
+  gt::noiseModel::Diagonal::shared_ptr trans_cov = gt::noiseModel::Diagonal::Sigmas((gt::Vector(6) << 5*M_PI/180.0, 5*M_PI/180.0, 5*M_PI/180.0, 20, 20, 0.1).finished()); // transform noise (rad x 3, m x 3)
+  gt::noiseModel::Diagonal::shared_ptr l_cov = gt::noiseModel::Isotropic::Sigma(3, 0.001); // landmark location noise (meters)
+  gt::noiseModel::Diagonal::shared_ptr z_cov = gt::noiseModel::Isotropic::Sigma(2, 1.0); // pixel measurement noise (pixels)
 
+  // Initialize the isam solver
+  gt::ISAM2Params isam_params;
+  isam_params.setFactorization("QR");
+  gt::ISAM2 isam(isam_params);
 
+  gt::NonlinearFactorGraph fg;
+  gt::Values initial;
 
-
+  // Put the initial values into the graph
+  initial.insert(X(0), init_pose);
+  initial.insert(V(0), init_vel);
+  initial.insert(B(0), init_imu_bias);
+  initial.insert(K(0), init_K);
+  fg.add(gt::PriorFactor<gt::Pose3>(X(0), init_pose, init_pose_cov));
+  fg.add(gt::PriorFactor<gt::Vector3>(V(0), init_vel, init_vel_cov));
+  fg.add(gt::PriorFactor<gt::imuBias::ConstantBias>(B(0), init_imu_bias, imu_bias_init_cov));
+  fg.add(gt::PriorFactor<gt::Cal3_S2>(K(0), init_K, init_K_cov));
 }
 
 
