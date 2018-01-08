@@ -12,6 +12,7 @@
 #include <ros/package.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Imu.h>
+#include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 
@@ -26,6 +27,7 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/inference/Symbol.h>
+#include <gtsam/geometry/Cal3DS2.h>
 
 using namespace cv;
 using namespace std;
@@ -38,6 +40,7 @@ using gt::symbol_shorthand::V; // Vel   (xdot,ydot,zdot)
 using gt::symbol_shorthand::B; // Bias  (ax,ay,az,gx,gy,gz)
 using gt::symbol_shorthand::L; // Landmarks (x, y, z)
 using gt::symbol_shorthand::K; // Calibration (fx, fy, s, px, py)
+using gt::symbol_shorthand::Z; // Pixel Measurement (x, y)
 
 class Calibrator
 {
@@ -49,28 +52,9 @@ public:
 
 private:
 
-    typedef struct
-    {
-        Vector3d acc;
-        Vector3d gyro;
-        uint64_t usec;
-    } imu_measurement_t;
-
-    typedef struct
-    {
-        vector<Point2f> corner_positions;
-        vector<int> ids;
-        uint64_t usec;
-    } camera_measurement_t;
-
-    deque<imu_measurement_t> imu_queue_;
-    camera_measurement_t camera_meas_;
-    bool new_camera_;
-
     void get_corners(const InputArray img, vector<Point2f>& charucoCorners, vector<int>& charucoIds, OutputArray tracked);
-    void process_measurement_queues();
     void initialize_graph();
-    void add_measurement_to_graph(const Vector3d &dtheta, const Vector3d &dvel, const vector<Point2f> &corners, const vector<int> &ids);
+    void add_measurement_to_graph(const vector<Point2f> &corners, const vector<int> &ids);
 
     ros::NodeHandle nh_;
     ros::NodeHandle nh_private_;
@@ -79,6 +63,7 @@ private:
     image_transport::Publisher output_pub_;
     image_transport::Subscriber image_sub_;
     ros::Subscriber imu_sub_;
+    ros::Publisher odometry_pub_;
 
     Mat camMatrix_;
     Mat distCoeffs_;
@@ -92,13 +77,22 @@ private:
     Ptr<aruco::Board> board_;
 
     bool show_tracked_ = false;
+    uint64_t last_imu_time_nsec = 0;
 
     // GTSAM Factor Graph objects
+    gt::NonlinearFactorGraph fg_;
     gt::Values initial_values_;
     int num_poses_ = 0;
 
-    gt::NonlinearFactorGraph graph_;
+    gt::ISAM2* isam_;
     gt::PreintegratedCombinedMeasurements *imu_preintegrated_;
 
-    gt::Pose3* camera_transform_;
+    // Constant Noise Models
+    gt::noiseModel::Diagonal::shared_ptr z_cov_;
+    gt::noiseModel::Diagonal::shared_ptr l_cov_;
+    gt::noiseModel::Diagonal::shared_ptr imu_bias_init_cov_;
+
+    gt::NavState current_estimated_state_;
+    gt::imuBias::ConstantBias current_estimated_imu_bias_;
+    gt::imuBias::ConstantBias init_imu_bias_;
 };
