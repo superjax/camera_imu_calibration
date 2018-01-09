@@ -3,10 +3,13 @@
 #include <iostream>
 #include <fstream>
 
+#include <Eigen/Core>
+#include <Eigen/Dense>
+
+#include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/aruco/charuco.hpp>
-
-#include <Eigen/Core>
+#include <opencv2/core/eigen.hpp>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -23,6 +26,7 @@
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam_unstable/slam/ProjectionFactorPPPC.h>
+#include <gtsam_unstable/slam/ProjectionFactorPPP.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/ISAM2.h>
@@ -40,7 +44,7 @@ using gt::symbol_shorthand::V; // Vel   (xdot,ydot,zdot)
 using gt::symbol_shorthand::B; // Bias  (ax,ay,az,gx,gy,gz)
 using gt::symbol_shorthand::L; // Landmarks (x, y, z)
 using gt::symbol_shorthand::K; // Calibration (fx, fy, s, px, py)
-using gt::symbol_shorthand::Z; // Pixel Measurement (x, y)
+using gt::symbol_shorthand::T; // Camera-IMU Transform(r, p, y, x, y, z)
 
 class Calibrator
 {
@@ -52,9 +56,9 @@ public:
 
 private:
 
-    void get_corners(const InputArray img, vector<Point2f>& charucoCorners, vector<int>& charucoIds, OutputArray tracked);
-    void initialize_graph();
-    void add_measurement_to_graph(const vector<Point2f> &corners, const vector<int> &ids);
+    void get_corners(const InputArray img, vector<Point2f>& charucoCorners, vector<int>& charucoIds, OutputArray tracked, OutputArray &R, OutputArray &tvec);
+    void initialize_graph(Matrix3d& Rot, Vector3d& trans, Matrix3d& camK, Matrix<double, 5, 1> &camD);
+    void add_measurement_to_graph(const vector<Point2f> &corners, const vector<int> &ids, const Vector3d pos);
 
     ros::NodeHandle nh_;
     ros::NodeHandle nh_private_;
@@ -96,3 +100,4 @@ private:
     gt::imuBias::ConstantBias current_estimated_imu_bias_;
     gt::imuBias::ConstantBias init_imu_bias_;
 };
+

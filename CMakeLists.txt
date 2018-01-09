@@ -12,7 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
 )
 find_package(OpenCV REQUIRED)
-find_package(GTSAM)
+find_package(GTSAM REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -27,6 +28,7 @@ include_directories(
         include
         ${catkin_INCLUDE_DIRS}
         ${GTSAM_INCLUDE_DIR}
+        ${Eigen_INCLUDE_DIRS}
 )
 
 
